@@ -1,5 +1,9 @@
 name: Check & Update Pages
 
+# 允许 Actions 推送代码
+permissions:
+  contents: write
+
 on:
   schedule:
     - cron: '0 0 * * *'     # 每天 00:00（UTC）
@@ -13,6 +17,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # 读取本地版本
       - name: Read local version
         id: local
         run: |
@@ -23,6 +28,7 @@ jobs:
           fi
           echo "local_version=$VERSION" >> $GITHUB_OUTPUT
 
+      # 获取最新 release 版本
       - name: Get latest release version
         id: latest
         run: |
@@ -34,7 +40,72 @@ jobs:
           echo "本地版本: ${{ steps.local.outputs.local_version }}"
           echo "最新版本: ${{ steps.latest.outputs.latest_version }}"
 
+      # 如果已经是最新就跳过
       - name: Skip if up to date
+        if: steps.local.outputs.local_version == steps.latest.outputs.latest_version
+        run: echo "已经是最新版本，跳过。"
+
+      # 下载 release 中的 Pages.zip
+      - name: Download latest Pages.zip
+        if: steps.local.outputs.local_version != steps.latest.outputs.latest_version
+        run: |
+          curl -L -o Pages.zip \
+            https://github.com/byJoey/cfnew/releases/download/${{ steps.latest.outputs.latest_version }}/Pages.zip
+          unzip -o Pages.zip
+
+      # 安装混淆器
+      - name: Install obfuscator
+        if: steps.local.outputs.local_version != steps.latest.outputs.latest_version
+        run: npm install -g javascript-obfuscator
+
+      # 混淆 Pages/_worker.js
+      - name: Obfuscate _worker.js
+        if: steps.local.outputs.local_version != steps.latest.outputs.latest_version
+        run: |
+          javascript-obfuscator Pages/_worker.js \
+            --output Pages/_worker.js \
+            --compact true \
+            --string-array-encoding base64
+
+      # 保存新版本号
+      - name: Save new version
+        if: steps.local.outputs.local_version != steps.latest.outputs.latest_version
+        run: |
+          echo "${{ steps.latest.outputs.latest_version }}" > VERSION.txt
+
+      # 提交代码
+      - name: Commit changes
+        if: steps.local.outputs.local_version != steps.latest.outputs.latest_version
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Auto update + obfuscate to ${{ steps.latest.outputs.latest_version }}"
+          git push
+      # 混淆 Pages/_worker.js
+      - name: Obfuscate _worker.js
+        if: steps.local.outputs.local_version != steps.latest.outputs.latest_version
+        run: |
+          javascript-obfuscator Pages/_worker.js \
+            --output Pages/_worker.js \
+            --compact true \
+            --string-array-encoding base64
+
+      # 保存新版本号
+      - name: Save new version
+        if: steps.local.outputs.local_version != steps.latest.outputs.latest_version
+        run: |
+          echo "${{ steps.latest.outputs.latest_version }}" > VERSION.txt
+
+      # 提交代码
+      - name: Commit changes
+        if: steps.local.outputs.local_version != steps.latest.outputs.latest_version
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Auto update + obfuscate to ${{ steps.latest.outputs.latest_version }}"
+          git push      - name: Skip if up to date
         if: steps.local.outputs.local_version == steps.latest.outputs.latest_version
         run: echo "已经是最新的，跳过。"
 
